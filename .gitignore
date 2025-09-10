@@ -1,22 +1,56 @@
+# --- Python ---
 .venv/
-miniconda/
-miniconda
+venv/
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
 *.db
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- Conda ---
+miniconda/
+miniconda*/
+
+# --- Node/JS ---
+node_modules/
+.npm/
+.pnpm-store/
+.turbo/
+.next/
+dist/
+build/
+.parcel-cache/
+.svelte-kit/
+.nuxt/
+
+# --- Environment & Secrets ---
+.env
+.env.*
+
+# --- IDEs & Editors ---
+.vscode/
+.vs/
+.idea/
+*.swp
+*.swo
+
+# --- OS & Misc ---
+.DS_Store
+Thumbs.db
+
+# --- Project-specific (Prometheus Studio) ---
 flat.txt
 flatten_files_for_gpt.py
 flatten_all_files_for_gpt.py
-.vscode/
-.vs
-.vs/
-.vs/*
-vscode
-.env
-app/__pycache__
-app/__pycache__/*
-app/tools/__pycache__
-app/tools/__pycache__/*
-data
-data/*
-db/
-db/*
 stop_venv.bat
+
+# --- Data & DB ---
+data/
+db/
+
+# --- Bytecode Caches (explicit paths from repo) ---
+app/__pycache__/
+app/tools/__pycache__/
