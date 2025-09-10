@@ -1,5 +1,6 @@
 # app/tools/CodexMCPTool.py
 import os
+import json
 import uuid
 from typing import Literal, List, Dict, Any, Optional
 
@@ -159,39 +160,40 @@ class CodexMCPTool(BaseTool):
 
     def run(self, inputs: CodexMCPToolInputSchema) -> Dict[str, Any]:
         try:
-            if inputs.action == "propose_change":
+            data = normalize_codex_input(inputs)
+            if data.action == "propose_change":
                 return self.client.propose_change(
-                    goal=inputs.goal or "",
-                    context=inputs.context or "",
-                    repoRef=inputs.repoRef or {"mode": "local", "repo_path": os.getcwd()},
-                    constraints=inputs.constraints or {},
-                    dry_run=inputs.dry_run,
+                    goal=data.goal or "",
+                    context=data.context or "",
+                    repoRef=data.repoRef or {"mode": "local", "repo_path": os.getcwd()},
+                    constraints=data.constraints or {},
+                    dry_run=data.dry_run,
                 )
 
-            if inputs.action == "apply_change":
+            if data.action == "apply_change":
                 return self.client.apply_change(
-                    plan_id=inputs.plan_id or "",
-                    goal=inputs.goal or "",
-                    repoRef=inputs.repoRef or {"mode": "local", "repo_path": os.getcwd()},
-                    constraints=inputs.constraints or {},
-                    run_checks=bool(inputs.run_checks),
-                    open_pr=bool(inputs.open_pr),
-                    branch_prefix=inputs.branch_prefix or "feature/",
-                    dry_run=inputs.dry_run,
+                    plan_id=data.plan_id or "",
+                    goal=data.goal or "",
+                    repoRef=data.repoRef or {"mode": "local", "repo_path": os.getcwd()},
+                    constraints=data.constraints or {},
+                    run_checks=bool(data.run_checks),
+                    open_pr=bool(data.open_pr),
+                    branch_prefix=data.branch_prefix or "feature/",
+                    dry_run=data.dry_run,
                 )
 
-            if inputs.action == "review_code":
+            if data.action == "review_code":
                 return self.client.review_code(
-                    target=inputs.target or {},
-                    guidelines=inputs.guidelines or [],
-                    severity_threshold=inputs.severity_threshold or "warn",
+                    target=data.target or {},
+                    guidelines=data.guidelines or [],
+                    severity_threshold=data.severity_threshold or "warn",
                 )
 
-            if inputs.action == "explain_change":
+            if data.action == "explain_change":
                 return self.client.explain_change(
-                    target=inputs.target or {},
-                    audience=inputs.audience or "dev",
-                    max_words=int(inputs.max_words or 200),
+                    target=data.target or {},
+                    audience=data.audience or "dev",
+                    max_words=int(data.max_words or 200),
                 )
 
         except CodexMCPError:
@@ -199,4 +201,26 @@ class CodexMCPTool(BaseTool):
         except Exception as e:
             raise CodexMCPError("500_CODEX_EXECUTION_ERROR", f"Unexpected error: {e}") from e
 
-        raise CodexMCPError("400_INVALID_INPUT", f"Unknown action: {inputs.action}")
+        raise CodexMCPError("400_INVALID_INPUT", f"Unknown action: {getattr(inputs, 'action', None)}")
+
+
+def normalize_codex_input(obj: Any) -> CodexMCPToolInputSchema:
+    """Normalize tool input into CodexMCPToolInputSchema.
+    Accepts Pydantic model, dict, JSON string, or single-item list. Raises CodexMCPError on invalid input.
+    """
+    if isinstance(obj, CodexMCPToolInputSchema):
+        return obj
+    if isinstance(obj, BaseModel):
+        data = obj.model_dump() if hasattr(obj, "model_dump") else obj.dict()
+        return CodexMCPToolInputSchema(**data)
+    if isinstance(obj, dict):
+        return CodexMCPToolInputSchema(**obj)
+    if isinstance(obj, str):
+        try:
+            parsed = json.loads(obj)
+        except Exception:
+            raise CodexMCPError("400_INVALID_INPUT", "Expected single JSON object for tool input.")
+        return normalize_codex_input(parsed)
+    if isinstance(obj, list) and len(obj) == 1:
+        return normalize_codex_input(obj[0])
+    raise CodexMCPError("400_INVALID_INPUT", "Expected single JSON object for tool input.")
