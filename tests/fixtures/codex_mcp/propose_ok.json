@@ -1,0 +1,13 @@
+{
+  "jsonrpc": "2.0",
+  "id": "req-1",
+  "result": {
+    "plan_id": "11111111-1111-1111-1111-111111111111",
+    "preview_diff": "--- a/file\n+++ b/file\n@@\n+planned change\n",
+    "summary": "Proposed changes to files",
+    "files": [
+      "app/tools/CodexMCPTool.py",
+      "app/my_tools.py"
+    ]
+  }
+}

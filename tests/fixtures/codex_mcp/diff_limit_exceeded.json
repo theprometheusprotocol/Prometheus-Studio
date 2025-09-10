@@ -1,0 +1,8 @@
+{
+  "jsonrpc": "2.0",
+  "id": "req-6",
+  "error": {
+    "code": "DIFF_LIMIT_EXCEEDED",
+    "message": "Diff limit exceeded: proposed patch is too large (limit 5000 lines)."
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "jsonrpc": "2.0",
+  "id": "req-2",
+  "result": {
+    "branch": "feature/codex-mcp-apply",
+    "changed_files": ["app/tools/CodexMCPTool.py"],
+    "commit_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "summary": "Applied planned changes"
+  }
+}

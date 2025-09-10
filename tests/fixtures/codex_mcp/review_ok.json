@@ -1,0 +1,15 @@
+{
+  "jsonrpc": "2.0",
+  "id": "req-3",
+  "result": {
+    "findings": [
+      {
+        "path": "app/tools/CodexMCPTool.py",
+        "line": 42,
+        "level": "warning",
+        "message": "Cyclomatic complexity 12",
+        "ruleId": "complexity"
+      }
+    ]
+  }
+}
