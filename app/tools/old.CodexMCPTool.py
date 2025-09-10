@@ -1,10 +1,9 @@
-# app/tools/CodexMCPTool.py
 import os
 import uuid
 from typing import Literal, List, Dict, Any, Optional
 
 import requests
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from crewai.tools import BaseTool
 
 
@@ -16,17 +15,20 @@ class CodexMCPError(RuntimeError):
 
 
 def _map_mcp_error(err: Dict[str, Any]) -> CodexMCPError:
+    # Accept codes as either numeric or string identifiers; prefer string identifiers.
     code = err.get("code")
     msg = err.get("message", "Unknown Codex MCP error")
 
+    # Normalize to string identifier if nested under data
     if isinstance(code, int):
-        # Fallback numeric mapping
+        # Fallback numeric mapping (generic)
         numeric_map = {
             -32602: "400_INVALID_INPUT",
             -32000: "500_CODEX_EXECUTION_ERROR",
         }
         studio_code = numeric_map.get(code, "500_CODEX_EXECUTION_ERROR")
     else:
+        # code may be a string like PATH_DENIED
         str_code = str(code or "CODEX_EXECUTION_ERROR").upper()
         mapping = {
             "INVALID_INPUT": "400_INVALID_INPUT",
@@ -44,15 +46,13 @@ def _map_mcp_error(err: Dict[str, Any]) -> CodexMCPError:
 
 class CodexMCPClient:
     def __init__(self, base_url: str, timeout_sec: int) -> None:
-        # Normalize: always post JSON-RPC to root "/"
-        self.base_url = base_url.rstrip("/")
-        self.endpoint = f"{self.base_url}/"
+        self.base_url = base_url
         self.timeout = timeout_sec
 
     def _rpc(self, method: str, params: Dict[str, Any]) -> Dict[str, Any]:
         body = {"jsonrpc": "2.0", "id": str(uuid.uuid4()), "method": method, "params": params}
         try:
-            resp = requests.post(self.endpoint, json=body, timeout=self.timeout)
+            resp = requests.post(self.base_url, json=body, timeout=self.timeout)
             resp.raise_for_status()
         except requests.Timeout as e:
             raise CodexMCPError("504_TIMEOUT", f"Codex MCP timed out after {self.timeout}s while calling {method}.") from e
@@ -69,8 +69,6 @@ class CodexMCPClient:
 
         return payload.get("result", {})
 
-    # ---- Contract v1 methods ----
-
     def propose_change(
         self,
         goal: str,
@@ -81,7 +79,13 @@ class CodexMCPClient:
     ) -> Dict[str, Any]:
         return self._rpc(
             "propose_change",
-            {"goal": goal, "context": context, "repoRef": repoRef, "constraints": constraints, "dry_run": dry_run},
+            {
+                "goal": goal,
+                "context": context,
+                "repoRef": repoRef,
+                "constraints": constraints,
+                "dry_run": dry_run,
+            },
         )
 
     def apply_change(
@@ -109,37 +113,44 @@ class CodexMCPClient:
             },
         )
 
-    def review_code(self, target: Dict[str, Any], guidelines: List[Dict[str, Any]], severity_threshold: str = "warn") -> Dict[str, Any]:
-        return self._rpc("review_code", {"target": target, "guidelines": guidelines, "severity_threshold": severity_threshold})
+    def review_code(self, paths: List[str], rules: List[str]) -> Dict[str, Any]:
+        return self._rpc(
+            "review_code",
+            {
+                "paths": paths,
+                "rules": rules,
+            },
+        )
 
-    def explain_change(self, target: Dict[str, Any], audience: str = "dev", max_words: int = 200) -> Dict[str, Any]:
-        return self._rpc("explain_change", {"target": target, "audience": audience, "max_words": max_words})
+    def explain_change(self, plan_id: str) -> Dict[str, Any]:
+        return self._rpc(
+            "explain_change",
+            {
+                "plan_id": plan_id,
+            },
+        )
 
-
-# ---- Tool schema uses only Contract v1 fields ----
 
 class CodexMCPToolInputSchema(BaseModel):
     action: Literal["propose_change", "apply_change", "review_code", "explain_change"]
 
     # propose_change
-    goal: Optional[str] = None
-    context: Optional[str] = None
-    repoRef: Optional[Dict[str, Any]] = None
-    constraints: Optional[Dict[str, Any]] = None
+    repo_root: Optional[str] = None
+    include: Optional[List[str]] = None
+    exclude: Optional[List[str]] = None
+    objective: Optional[str] = None
+    context: Optional[List[Dict[str, Any]]] = None
     dry_run: bool = True
 
     # apply_change
     plan_id: Optional[str] = None
-    run_checks: Optional[bool] = True
-    open_pr: Optional[bool] = False
-    branch_prefix: Optional[str] = "feature/"
+    strategy: Optional[Literal["local"]] = Field(default=None)
+    branch: Optional[str] = None
+    commit_message: Optional[str] = None
 
-    # review_code / explain_change
-    target: Optional[Dict[str, Any]] = None
-    guidelines: Optional[List[Dict[str, Any]]] = None
-    severity_threshold: Optional[str] = "warn"
-    audience: Optional[str] = "dev"
-    max_words: Optional[int] = 200
+    # review_code
+    paths: Optional[List[str]] = None
+    rules: Optional[List[str]] = None
 
 
 class CodexMCPTool(BaseTool):
@@ -150,53 +161,44 @@ class CodexMCPTool(BaseTool):
 
     def __init__(self, base_url: Optional[str] = None, timeout_sec: Optional[int] = None) -> None:
         super().__init__()
-        base_url_final = (base_url or os.getenv("CODEX_MCP_URL", "http://localhost:8765")).rstrip("/")
+        base_url_final = base_url or os.getenv("CODEX_MCP_URL", "http://localhost:8765/")
         timeout_final = int(timeout_sec or int(os.getenv("CODEX_TIMEOUT_SEC", "60")))
         self.client = CodexMCPClient(base_url_final, timeout_final)
 
     def _run(self, *args, **kwargs) -> Dict[str, Any]:
+        # The tool is designed for structured inputs via args_schema + run()
         raise CodexMCPError("400_INVALID_INPUT", "CodexMCPTool requires structured inputs via run().")
 
     def run(self, inputs: CodexMCPToolInputSchema) -> Dict[str, Any]:
         try:
             if inputs.action == "propose_change":
                 return self.client.propose_change(
-                    goal=inputs.goal or "",
-                    context=inputs.context or "",
-                    repoRef=inputs.repoRef or {"mode": "local", "repo_path": os.getcwd()},
-                    constraints=inputs.constraints or {},
+                    repo_root=inputs.repo_root or os.getcwd(),
+                    include=inputs.include or [],
+                    exclude=inputs.exclude or [],
+                    objective=inputs.objective or "",
+                    context=inputs.context or [],
                     dry_run=inputs.dry_run,
                 )
-
             if inputs.action == "apply_change":
                 return self.client.apply_change(
                     plan_id=inputs.plan_id or "",
-                    goal=inputs.goal or "",
-                    repoRef=inputs.repoRef or {"mode": "local", "repo_path": os.getcwd()},
-                    constraints=inputs.constraints or {},
-                    run_checks=bool(inputs.run_checks),
-                    open_pr=bool(inputs.open_pr),
-                    branch_prefix=inputs.branch_prefix or "feature/",
-                    dry_run=inputs.dry_run,
+                    strategy=inputs.strategy or "local",
+                    branch=inputs.branch or "feature/codex-mcp-apply",
+                    commit_message=inputs.commit_message or "chore(codex): apply planned changes",
                 )
-
             if inputs.action == "review_code":
                 return self.client.review_code(
-                    target=inputs.target or {},
-                    guidelines=inputs.guidelines or [],
-                    severity_threshold=inputs.severity_threshold or "warn",
+                    paths=inputs.paths or [],
+                    rules=inputs.rules or [],
                 )
-
             if inputs.action == "explain_change":
                 return self.client.explain_change(
-                    target=inputs.target or {},
-                    audience=inputs.audience or "dev",
-                    max_words=int(inputs.max_words or 200),
+                    plan_id=inputs.plan_id or "",
                 )
-
         except CodexMCPError:
             raise
-        except Exception as e:
+        except Exception as e:  # safety net
             raise CodexMCPError("500_CODEX_EXECUTION_ERROR", f"Unexpected error: {e}") from e
 
         raise CodexMCPError("400_INVALID_INPUT", f"Unknown action: {inputs.action}")

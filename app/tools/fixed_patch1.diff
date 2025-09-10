@@ -1,0 +1,100 @@
+diff --git a/app/tools/CodexMCPTool.py b/app/tools/CodexMCPTool.py
+index a1b2c3d..e4f5g6h 100644
+--- a/app/tools/CodexMCPTool.py
++++ b/app/tools/CodexMCPTool.py
+@@ -19,10 +19,11 @@
+ 
+ class CodexMCPClient:
+     def __init__(self, base_url: str, timeout_sec: int) -> None:
+-        self.base_url = base_url
+-        self.timeout = timeout_sec
++        # Normalize: always post JSON-RPC to root "/"
++        self.base_url = base_url.rstrip("/")
++        self.endpoint = f"{self.base_url}/"
++        self.timeout = timeout_sec
+ 
+     def _rpc(self, method: str, params: Dict[str, Any]) -> Dict[str, Any]:
+-        body = {"jsonrpc": "2.0", "id": str(uuid.uuid4()), "method": method, "params": params}
++        body = {"jsonrpc": "2.0", "id": str(uuid.uuid4()), "method": method, "params": params}
+         try:
+-            resp = requests.post(self.base_url, json=body, timeout=self.timeout)
++            resp = requests.post(self.endpoint, json=body, timeout=self.timeout)
+             resp.raise_for_status()
+         except requests.Timeout as e:
+             raise CodexMCPError("504_TIMEOUT", f"Codex MCP timed out after {self.timeout}s while calling {method}.") from e
+@@ -107,24 +108,30 @@
+ 
+ class CodexMCPToolInputSchema(BaseModel):
+     action: Literal["propose_change", "apply_change", "review_code", "explain_change"]
+ 
+-    # propose_change
+-    repo_root: Optional[str] = None
+-    include: Optional[List[str]] = None
+-    exclude: Optional[List[str]] = None
+-    objective: Optional[str] = None
+-    context: Optional[List[Dict[str, Any]]] = None
++    # propose_change (legacy inputs kept, contract v1 added)
++    repo_root: Optional[str] = None          # legacy
++    include: Optional[List[str]] = None      # legacy
++    exclude: Optional[List[str]] = None      # legacy
++    objective: Optional[str] = None          # legacy
++    # Contract v1
++    goal: Optional[str] = None
++    context: Optional[str] = None
++    repoRef: Optional[Dict[str, Any]] = None
++    constraints: Optional[Dict[str, Any]] = None
+     dry_run: bool = True
+ 
+     # apply_change
+     plan_id: Optional[str] = None
+-    strategy: Optional[Literal["local"]] = Field(default=None)
+-    branch: Optional[str] = None
+-    commit_message: Optional[str] = None
++    # Contract v1
++    run_checks: Optional[bool] = None
++    open_pr: Optional[bool] = None
++    branch_prefix: Optional[str] = None
+ 
+     # review_code
+     paths: Optional[List[str]] = None
+     rules: Optional[List[str]] = None
+@@ -149,15 +156,22 @@
+                     context=inputs.context or [],
+                     dry_run=inputs.dry_run,
+                 )
++            # Prefer contract v1; fall back to legacy fields if provided
++            goal = (inputs.goal or inputs.objective or "").strip()
++            repoRef = inputs.repoRef or {"mode": "local", "repo_path": (inputs.repo_root or os.getcwd())}
++            constraints = inputs.constraints or {}
++            ctx = inputs.context or ""
++            return self.client.propose_change(
++                goal=goal,
++                context=ctx,
++                repoRef=repoRef,
++                constraints=constraints,
++                dry_run=inputs.dry_run,
++            )
+             if inputs.action == "apply_change":
+-                return self.client.apply_change(
+-                    plan_id=inputs.plan_id or "",
+-                    strategy=inputs.strategy or "local",
+-                    branch=inputs.branch or "feature/codex-mcp-apply",
+-                    commit_message=inputs.commit_message or "chore(codex): apply planned changes",
+-                )
++                repoRef = inputs.repoRef or {"mode": "local", "repo_path": (inputs.repo_root or os.getcwd())}
++                constraints = inputs.constraints or {}
++                return self.client.apply_change(
++                    plan_id=inputs.plan_id or "",
++                    goal=(inputs.goal or ""),
++                    repoRef=repoRef,
++                    constraints=constraints,
++                    run_checks=True if inputs.run_checks is None else inputs.run_checks,
++                    open_pr=False if inputs.open_pr is None else inputs.open_pr,
++                    branch_prefix=inputs.branch_prefix or "feature/",
++                    dry_run=inputs.dry_run,
++                )
+             if inputs.action == "review_code":
+                 return self.client.review_code(
+                     paths=inputs.paths or [],
+                     rules=inputs.rules or [],
+                 )

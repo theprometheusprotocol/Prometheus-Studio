@@ -137,5 +137,5 @@ def test_timeout_is_mapped(monkeypatch):
 
     client = CodexMCPClient(base_url=url, timeout_sec=1)
     with pytest.raises(CodexMCPError) as ei:
-        client.explain_change(plan_id="00000000-0000-0000-0000-000000000000")
+        client.explain_change(target={})
     assert "504_TIMEOUT" in str(ei.value)
