@@ -151,12 +151,17 @@ class CodexMCPTool(BaseTool):
     name: str = "CodexMCPTool"
     description: str = "Plan, apply, review and explain code changes via Codex MCP."
     args_schema = CodexMCPToolInputSchema
+    client: Optional[CodexMCPClient] = None
 
     def __init__(self, base_url: Optional[str] = None, timeout_sec: Optional[int] = None) -> None:
         super().__init__()
         base_url_final = base_url or os.getenv("CODEX_MCP_URL", "http://localhost:8765/")
         timeout_final = int(timeout_sec or int(os.getenv("CODEX_TIMEOUT_SEC", "60")))
         self.client = CodexMCPClient(base_url_final, timeout_final)
+
+    def _run(self, *args, **kwargs) -> Dict[str, Any]:
+        # The tool is designed for structured inputs via args_schema + run()
+        raise CodexMCPError("400_INVALID_INPUT", "CodexMCPTool requires structured inputs via run().")
 
     def run(self, inputs: CodexMCPToolInputSchema) -> Dict[str, Any]:
         try:
@@ -191,4 +196,3 @@ class CodexMCPTool(BaseTool):
             raise CodexMCPError("500_CODEX_EXECUTION_ERROR", f"Unexpected error: {e}") from e
 
         raise CodexMCPError("400_INVALID_INPUT", f"Unknown action: {inputs.action}")
-
