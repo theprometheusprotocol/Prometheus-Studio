@@ -12,6 +12,7 @@ from pg_knowledge import PageKnowledge
 from dotenv import load_dotenv
 from llms import load_secrets_fron_env
 import os
+from branding import get_branding
 
 def pages():
     return {
@@ -36,7 +37,8 @@ def load_data():
 
 def draw_sidebar():
     with st.sidebar:
-        st.image("img/crewai_logo.png")
+        branding = ss.get("branding") or get_branding()
+        st.image(branding["logo"]) 
 
         if 'page' not in ss:
             ss.page = 'Crews'
@@ -47,8 +49,10 @@ def draw_sidebar():
             st.rerun()
             
 def main():
-    st.set_page_config(page_title="CrewAI Studio", page_icon="img/favicon.ico", layout="wide")
     load_dotenv()
+    branding = get_branding()
+    ss.branding = branding
+    st.set_page_config(page_title=branding["title"], page_icon=branding["favicon"], layout="wide")
     load_secrets_fron_env()
     if (str(os.getenv('AGENTOPS_ENABLED')).lower() in ['true', '1']) and not ss.get('agentops_failed', False):
         try:
@@ -63,6 +67,19 @@ def main():
     draw_sidebar()
     PageCrewRun.maintain_session_state() #this will persist the session state for the crew run page so crew run can be run in a separate thread
     pages()[ss.page].draw()
+
+    # Footer
+    footer_text = branding.get("footer")
+    if footer_text:
+        st.markdown(
+            """
+            <style>
+            .app-footer {text-align:center; color: inherit; opacity: 0.8; padding: 1rem 0;}
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.markdown(f"<div class='app-footer'>{footer_text}</div>", unsafe_allow_html=True)
     
 if __name__ == '__main__':
     main()
