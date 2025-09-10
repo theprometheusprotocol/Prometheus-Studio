@@ -71,21 +71,19 @@ class CodexMCPClient:
 
     def propose_change(
         self,
-        repo_root: str,
-        include: List[str],
-        exclude: List[str],
-        objective: str,
-        context: List[Dict[str, Any]],
+        goal: str,
+        context: str,
+        repoRef: Dict[str, Any],
+        constraints: Dict[str, Any],
         dry_run: bool = True,
     ) -> Dict[str, Any]:
         return self._rpc(
-            "codex.propose_change",
+            "propose_change",
             {
-                "repo_root": repo_root,
-                "include": include,
-                "exclude": exclude,
-                "objective": objective,
+                "goal": goal,
                 "context": context,
+                "repoRef": repoRef,
+                "constraints": constraints,
                 "dry_run": dry_run,
             },
         )
@@ -93,23 +91,31 @@ class CodexMCPClient:
     def apply_change(
         self,
         plan_id: str,
-        strategy: str,
-        branch: str,
-        commit_message: str,
+        goal: str,
+        repoRef: Dict[str, Any],
+        constraints: Dict[str, Any],
+        run_checks: bool,
+        open_pr: bool,
+        branch_prefix: str,
+        dry_run: bool,
     ) -> Dict[str, Any]:
         return self._rpc(
-            "codex.apply_change",
+            "apply_change",
             {
                 "plan_id": plan_id,
-                "strategy": strategy,
-                "branch": branch,
-                "commit_message": commit_message,
+                "goal": goal,
+                "repoRef": repoRef,
+                "constraints": constraints,
+                "run_checks": run_checks,
+                "open_pr": open_pr,
+                "branch_prefix": branch_prefix,
+                "dry_run": dry_run,
             },
         )
 
     def review_code(self, paths: List[str], rules: List[str]) -> Dict[str, Any]:
         return self._rpc(
-            "codex.review_code",
+            "review_code",
             {
                 "paths": paths,
                 "rules": rules,
@@ -118,7 +124,7 @@ class CodexMCPClient:
 
     def explain_change(self, plan_id: str) -> Dict[str, Any]:
         return self._rpc(
-            "codex.explain_change",
+            "explain_change",
             {
                 "plan_id": plan_id,
             },

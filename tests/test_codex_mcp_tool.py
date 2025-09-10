@@ -24,7 +24,7 @@ def test_client_propose_change_ok(monkeypatch):
     def dispatch(request):
         payload = json.loads(request.body.decode())
         method = payload.get("method")
-        if method == "codex.propose_change":
+        if method == "propose_change":
             return (200, {"Content-Type": "application/json"}, json.dumps(_load("propose_ok.json")))
         return (500, {}, json.dumps({"jsonrpc": "2.0", "id": "x", "error": {"code": "CODEX_EXECUTION_ERROR", "message": "unexpected"}}))
 
@@ -36,27 +36,41 @@ def test_client_propose_change_ok(monkeypatch):
     )
 
     client = CodexMCPClient(base_url=url, timeout_sec=30)
-    result = client.propose_change(repo_root=os.getcwd(), include=["app/**/*.py"], exclude=["**/__pycache__/**"], objective="Add Codex MCP tool", context=[], dry_run=True)
+    result = client.propose_change(
+        goal="Add Codex MCP tool",
+        context="",
+        repoRef={"mode": "local", "repo_path": os.getcwd()},
+        constraints={"max_files": 10, "max_loc": 200, "timeout_sec": 60},
+        dry_run=True,
+    )
     assert "plan_id" in result and result["plan_id"]
     assert "preview_diff" in result and result["preview_diff"].startswith("--- ")
 
 
 @responses.activate
-def test_tool_apply_change_ok():
+def test_apply_change_ok():
     url = os.getenv("CODEX_MCP_URL", "http://localhost:8765/")
 
     def dispatch(request):
         payload = json.loads(request.body.decode())
         method = payload.get("method")
-        if method == "codex.apply_change":
+        if method == "apply_change":
             return (200, {"Content-Type": "application/json"}, json.dumps(_load("apply_ok.json")))
         return (500, {}, json.dumps({"jsonrpc": "2.0", "id": "x", "error": {"code": "CODEX_EXECUTION_ERROR", "message": "unexpected"}}))
 
     responses.add_callback(responses.POST, url, callback=dispatch, content_type="application/json")
 
-    tool = CodexMCPTool(base_url=url, timeout_sec=15)
-    inputs = CodexMCPToolInputSchema(action="apply_change", plan_id="00000000-0000-0000-0000-000000000000", strategy="local", branch="feature/codex-apply-test", commit_message="test: apply change via codex")
-    result = tool.run(inputs)
+    client = CodexMCPClient(base_url=url, timeout_sec=15)
+    result = client.apply_change(
+        plan_id="00000000-0000-0000-0000-000000000000",
+        goal="test apply",
+        repoRef={"mode": "local", "repo_path": os.getcwd()},
+        constraints={"max_files": 10, "max_loc": 200, "timeout_sec": 60},
+        run_checks=False,
+        open_pr=False,
+        branch_prefix="feature/codex-mcp-apply",
+        dry_run=False,
+    )
     assert result["branch"] == "feature/codex-mcp-apply"
     assert isinstance(result.get("changed_files"), list) and result.get("commit_sha")
 
@@ -68,7 +82,7 @@ def test_path_denied_error_is_mapped():
     def dispatch(request):
         payload = json.loads(request.body.decode())
         method = payload.get("method")
-        if method == "codex.propose_change":
+        if method == "propose_change":
             return (200, {"Content-Type": "application/json"}, json.dumps(_load("path_denied.json")))
         return (500, {}, json.dumps({"jsonrpc": "2.0", "id": "x", "error": {"code": "CODEX_EXECUTION_ERROR", "message": "unexpected"}}))
 
@@ -76,7 +90,13 @@ def test_path_denied_error_is_mapped():
 
     client = CodexMCPClient(base_url=url, timeout_sec=5)
     with pytest.raises(CodexMCPError) as ei:
-        client.propose_change(repo_root=os.getcwd(), include=["app/**/*.py"], exclude=["**/.git/**"], objective="", context=[], dry_run=True)
+        client.propose_change(
+            goal="",
+            context="",
+            repoRef={"mode": "local", "repo_path": os.getcwd()},
+            constraints={"max_files": 10, "max_loc": 200, "timeout_sec": 60},
+            dry_run=True,
+        )
     assert "403_PATH_DENIED" in str(ei.value)
 
 
@@ -87,15 +107,21 @@ def test_diff_limit_error_is_mapped():
     def dispatch(request):
         payload = json.loads(request.body.decode())
         method = payload.get("method")
-        if method == "codex.propose_change":
+        if method == "propose_change":
             return (200, {"Content-Type": "application/json"}, json.dumps(_load("diff_limit_exceeded.json")))
         return (500, {}, json.dumps({"jsonrpc": "2.0", "id": "x", "error": {"code": "CODEX_EXECUTION_ERROR", "message": "unexpected"}}))
 
     responses.add_callback(responses.POST, url, callback=dispatch, content_type="application/json")
 
-    tool = CodexMCPTool(base_url=url, timeout_sec=10)
+    client = CodexMCPClient(base_url=url, timeout_sec=10)
     with pytest.raises(CodexMCPError) as ei:
-        tool.run(CodexMCPToolInputSchema(action="propose_change", repo_root=os.getcwd(), include=["**/*"], exclude=["**/.git/**"], objective="Big change", context=[], dry_run=True))
+        client.propose_change(
+            goal="Big change",
+            context="",
+            repoRef={"mode": "local", "repo_path": os.getcwd()},
+            constraints={"max_files": 1, "max_loc": 1, "timeout_sec": 1},
+            dry_run=True,
+        )
     assert "413_DIFF_LIMIT_EXCEEDED" in str(ei.value)
 
 
