@@ -158,6 +158,15 @@ docker-compose up --build
 
 Before running the application, ensure you update the `.env` file with your API keys and other necessary configurations. An example `.env` file is provided for reference.
 
+### Codex MCP Tool
+
+To enable the Codex MCP Tool (v1) which plans/applies/reviews code via a local Codex MCP server, configure:
+
+- `CODEX_MCP_URL` — MCP JSON-RPC endpoint. Default: `http://localhost:8765/`.
+- `CODEX_TIMEOUT_SEC` — request timeout in seconds. Default: `60`.
+
+If `CODEX_MCP_URL` is empty, the tool is not registered in the Studio UI.
+
 ## Troubleshooting
 In case of problems:
 - Delete the `venv/miniconda` folder and reinstall `crewai-studio`.

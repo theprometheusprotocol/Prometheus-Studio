@@ -8,6 +8,7 @@ from tools.CustomCodeInterpreterTool import CustomCodeInterpreterTool
 from tools.CustomFileWriteTool import CustomFileWriteTool
 from tools.ScrapeWebsiteToolEnhanced import ScrapeWebsiteToolEnhanced
 from tools.ScrapflyScrapeWebsiteTool import ScrapflyScrapeWebsiteTool
+from tools.CodexMCPTool import CodexMCPTool
 
 from tools.DuckDuckGoSearchTool import DuckDuckGoSearchTool
 
@@ -396,6 +397,20 @@ class MyScrapflyScrapeWebsiteTool(MyTool):
             api_key=api_key
         )
 
+class MyCodexMCPTool(MyTool):
+    def __init__(self, tool_id=None, base_url=None, timeout_sec=None):
+        parameters = {
+            'base_url': {'mandatory': False},
+            'timeout_sec': {'mandatory': False}
+        }
+        super().__init__(tool_id, 'CodexMCPTool', "Plan, apply, review and explain code changes via Codex MCP.", parameters, base_url=base_url, timeout_sec=timeout_sec)
+
+    def create_tool(self) -> CodexMCPTool:
+        return CodexMCPTool(
+            base_url=self.parameters.get('base_url') if self.parameters.get('base_url') else None,
+            timeout_sec=int(self.parameters.get('timeout_sec')) if self.parameters.get('timeout_sec') else None
+        )
+
 # Register all tools here
 TOOL_CLASSES = {
     'DuckDuckGoSearchTool': MyDuckDuckGoSearchTool,
@@ -431,3 +446,7 @@ TOOL_CLASSES = {
     'PDFSearchTool': MyPDFSearchTool,
     'PGSearchTool': MyPGSearchTool    
 }
+
+import os as _os
+if _os.getenv('CODEX_MCP_URL', 'http://localhost:8765/').strip():
+    TOOL_CLASSES['CodexMCPTool'] = MyCodexMCPTool
