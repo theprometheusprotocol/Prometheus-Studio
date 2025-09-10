@@ -1,0 +1,7 @@
+{
+  "jsonrpc": "2.0",
+  "id": "req-4",
+  "result": {
+    "explanation_markdown": "## What changed...\nDetailed explanation here."
+  }
+}
